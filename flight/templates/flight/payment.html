@@ -1,0 +1,390 @@
+{% extends 'flight/layout.html' %}
+
+{% load static %}
+{% load flight_extras %}
+
+{% block head %}
+    <title>Payment | Flight</title>
+    <link rel="stylesheet" href="{% static 'css/payment_style.css' %}">
+    <style>
+        .payment-method-selector {
+            margin-bottom: 20px;
+        }
+        .payment-method-option {
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .payment-method-option:hover {
+            border-color: #007bff;
+        }
+        .payment-method-option.active {
+            border-color: #007bff;
+            background-color: #f8f9fa;
+        }
+        .payment-details {
+            display: none;
+        }
+        .payment-details.active {
+            display: block;
+        }
+        .crypto-wallet-option {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 10px;
+            cursor: pointer;
+        }
+        .crypto-wallet-option:hover {
+            background-color: #f8f9fa;
+        }
+        .crypto-wallet-option.selected {
+            border-color: #007bff;
+            background-color: #e3f2fd;
+        }
+        .gift-card-option {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 10px;
+            cursor: pointer;
+        }
+        .gift-card-option:hover {
+            background-color: #f8f9fa;
+        }
+        .gift-card-option.selected {
+            border-color: #28a745;
+            background-color: #d4edda;
+        }
+        .upload-gift-card {
+            border: 2px dashed #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .error-message {
+            color: #dc3545;
+            margin-bottom: 15px;
+            padding: 10px;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 4px;
+        }
+    </style>
+{% endblock %}
+
+{% block body %}
+    <section class="section section1">
+        <div class="container">
+            <div class="payment-box">
+                <div class="payment-box-head-div">
+                    <div class="payment-box-head">
+                        <h5>Payment Details</h5>
+                        <div class="display-td">
+                            <img class="card-img" src="{% static 'img/card.png' %}">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Display any error messages -->
+                {% if messages %}
+                    {% for message in messages %}
+                        <div class="error-message">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+                
+                {% if error %}
+                    <div class="error-message">
+                        {{ error }}
+                    </div>
+                {% endif %}
+                
+                <!-- Payment Method Selector -->
+                <div class="payment-method-selector">
+                    <h6>Select Payment Method:</h6>
+                    
+                    <div class="payment-method-option active" data-method="CARD">
+                        <div class="d-flex align-items-center">
+                            <input type="radio" name="payment_method" value="CARD" checked>
+                            <div class="ml-3">
+                                <strong>Credit/Debit Card</strong>
+                                <p class="mb-0 text-muted">Pay with your credit or debit card</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {% if crypto_wallets %}
+                    <div class="payment-method-option" data-method="CRYPTO">
+                        <div class="d-flex align-items-center">
+                            <input type="radio" name="payment_method" value="CRYPTO">
+                            <div class="ml-3">
+                                <strong>Cryptocurrency</strong>
+                                <p class="mb-0 text-muted">Pay with Bitcoin, Ethereum, or other cryptocurrencies</p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if gift_cards %}
+                    <div class="payment-method-option" data-method="GIFT_CARD">
+                        <div class="d-flex align-items-center">
+                            <input type="radio" name="payment_method" value="GIFT_CARD">
+                            <div class="ml-3">
+                                <strong>Gift Card</strong>
+                                <p class="mb-0 text-muted">Use your validated gift cards</p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="payment-details-input-box">
+                    <form action="{% url 'payment' %}" method="POST" id="paymentForm">
+                        {% csrf_token %}
+                        <input type="hidden" name="ticket" value="{{ticket}}" required>
+                        {% if ticket2 %}
+                            <input type="hidden" name="ticket2" value="{{ticket2}}" required>
+                        {% endif %}
+                        <input type="hidden" name="payment_method" id="selected_payment_method" value="CARD">
+                        <!-- Fix: Ensure fare is properly passed as a number -->
+                        <input type="hidden" name="fare" value="{{fare}}" required>
+                        
+                        <div class="row payment-amount-div">
+                            <div class="form-group">
+                                <label for="payment_amount">PAYMENT AMOUNT</label>
+                                <input type="text" class="form-control" id="payment_amount" name="display_fare" value="{{fare|currency}}" disabled required>
+                            </div>
+                        </div>
+
+                        <!-- Card Payment Details -->
+                        <div id="card-payment-details" class="payment-details active">
+                            <div class="row card-no-div">
+                                <div class="form-group">
+                                    <label for="card_number">CARD NUMBER</label>
+                                    <div class="input-group">
+                                        <input type="tel" pattern="[0-9]*" class="form-control" id="card_number" name="cardNumber" autocomplete="off" maxlength="19" placeholder="Enter card number" required>
+                                        <div class="input-group-append">
+                                            <span class="input-group-text">
+                                                <svg width="1em" height="1em" viewBox="0 0 16 16" class="bi bi-credit-card" fill="currentColor">
+                                                    <path fill-rule="evenodd" d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V4zm2-1a1 1 0 0 0-1 1v1h14V4a1 1 0 0 0-1-1H2zm13 4H1v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7z"/>
+                                                    <path d="M2 10a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-1z"/>
+                                                </svg>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row card-holder-div">
+                                <div class="form-group">
+                                    <label for="card_holder_name">CARD HOLDER'S NAME</label>
+                                    <input type="text" name="cardHolderName" class="form-control" id="cardHolderName" placeholder="Enter name" required>
+                                </div>
+                            </div>
+                            <div class="row expiry-cvv">
+                                <div class="row">
+                                    <div class="left-col">
+                                        <label for="expiry_month">EXPIRY DATE</label>
+                                        <div class="expiry-input-div">
+                                            <div class="month-div">
+                                                <select name="expMonth" id="expiry_month" class="form-control" required>
+                                                    <option value="">Month</option>
+                                                    {% for i in "01,02,03,04,05,06,07,08,09,10,11,12"|split:"," %}
+                                                        <option value="{{i}}">{{i}}</option>
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+                                            <div class="yeae-div">
+                                                <select name="expYear" id="expiry_year" class="form-control" required>
+                                                    <option value="">Year</option>
+                                                    {% year_range 2024 2035 as years %}
+                                                    {% for year in years %}
+                                                        <option value="{{year}}">{{year}}</option>
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="right-col">
+                                        <div class="form-group">
+                                            <label for="cvv_number">CVV CODE</label>
+                                            <input type="password" pattern="[0-9]*" class="form-control" placeholder="CVV" id="cvv_number" name="cvv" maxlength="4" required>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Crypto Payment Details -->
+                        {% if crypto_wallets %}
+                        <div id="crypto-payment-details" class="payment-details">
+                            <h6>Select Cryptocurrency:</h6>
+                            {% for wallet in crypto_wallets %}
+                                <div class="crypto-wallet-option" data-wallet-id="{{wallet.id}}">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <strong>{{wallet.get_crypto_type_display}}</strong>
+                                            <p class="mb-0 text-muted">{{wallet.wallet_address|truncatechars:30}}</p>
+                                        </div>
+                                        <div>
+                                            {% if wallet.qr_code %}
+                                                <img src="{{wallet.qr_code.url}}" alt="QR Code" style="width: 50px; height: 50px;">
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            {% empty %}
+                                <p class="text-muted">No cryptocurrency wallets available at the moment.</p>
+                            {% endfor %}
+                            <input type="hidden" name="crypto_wallet" id="selected_crypto_wallet">
+                        </div>
+                        {% endif %}
+
+                        <!-- Gift Card Payment Details -->
+                        {% if gift_cards %}
+                        <div id="gift-card-payment-details" class="payment-details">
+                            <h6>Your Gift Cards:</h6>
+                            {% for card in gift_cards %}
+                                <div class="gift-card-option" data-card-id="{{card.id}}" data-amount="{{card.amount}}">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <strong>Gift Card #{{card.id}}</strong>
+                                            <p class="mb-0 text-muted">Available Balance: {{card.amount|currency}}</p>
+                                        </div>
+                                        <div class="badge badge-success">Available</div>
+                                    </div>
+                                </div>
+                            {% empty %}
+                                <div class="upload-gift-card">
+                                    <p>No validated gift cards available.</p>
+                                    <a href="{% url 'user_gift_cards' %}" class="btn btn-outline-primary">Upload Gift Card</a>
+                                </div>
+                            {% endfor %}
+                            <input type="hidden" name="gift_card" id="selected_gift_card">
+                        </div>
+                        {% else %}
+                        <div id="gift-card-payment-details" class="payment-details">
+                            <div class="upload-gift-card">
+                                <p>No validated gift cards available.</p>
+                                <a href="{% url 'user_gift_cards' %}" class="btn btn-outline-primary">Upload Gift Card</a>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <div class="payment-btn">
+                            <button class="btn btn-primary btn-danger" type="submit">Make payment</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Payment method selection
+            const paymentOptions = document.querySelectorAll('.payment-method-option');
+            const paymentDetails = document.querySelectorAll('.payment-details');
+            const selectedMethodInput = document.getElementById('selected_payment_method');
+
+            paymentOptions.forEach(option => {
+                option.addEventListener('click', function() {
+                    const method = this.dataset.method;
+                    
+                    // Update active states
+                    paymentOptions.forEach(opt => opt.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    // Update radio button
+                    this.querySelector('input[type="radio"]').checked = true;
+                    selectedMethodInput.value = method;
+                    
+                    // Show/hide payment details
+                    paymentDetails.forEach(detail => detail.classList.remove('active'));
+                    const targetDetail = document.getElementById(method.toLowerCase() + '-payment-details');
+                    if (targetDetail) {
+                        targetDetail.classList.add('active');
+                    }
+                    
+                    // Update form validation
+                    updateFormValidation(method);
+                });
+            });
+
+            // Crypto wallet selection
+            const cryptoWallets = document.querySelectorAll('.crypto-wallet-option');
+            const selectedCryptoInput = document.getElementById('selected_crypto_wallet');
+
+            cryptoWallets.forEach(wallet => {
+                wallet.addEventListener('click', function() {
+                    cryptoWallets.forEach(w => w.classList.remove('selected'));
+                    this.classList.add('selected');
+                    if (selectedCryptoInput) {
+                        selectedCryptoInput.value = this.dataset.walletId;
+                    }
+                });
+            });
+
+            // Gift card selection
+            const giftCards = document.querySelectorAll('.gift-card-option');
+            const selectedGiftCardInput = document.getElementById('selected_gift_card');
+            const fareAmount = parseFloat('{{fare}}') || 0;
+
+            giftCards.forEach(card => {
+                card.addEventListener('click', function() {
+                    const cardAmount = parseFloat(this.dataset.amount) || 0;
+                    
+                    if (cardAmount >= fareAmount) {
+                        giftCards.forEach(c => c.classList.remove('selected'));
+                        this.classList.add('selected');
+                        if (selectedGiftCardInput) {
+                            selectedGiftCardInput.value = this.dataset.cardId;
+                        }
+                    } else {
+                        alert(`This gift card has insufficient balance. Available: $${cardAmount.toFixed(2)}, Required: $${fareAmount.toFixed(2)}`);
+                    }
+                });
+            });
+
+            // Form validation
+            function updateFormValidation(method) {
+                const cardFields = document.querySelectorAll('#card-payment-details input, #card-payment-details select');
+                
+                cardFields.forEach(field => {
+                    if (method === 'CARD') {
+                        field.setAttribute('required', 'required');
+                    } else {
+                        field.removeAttribute('required');
+                    }
+                });
+            }
+
+            document.getElementById('paymentForm').addEventListener('submit', function(e) {
+                const method = selectedMethodInput.value;
+                
+                if (method === 'CRYPTO') {
+                    const selectedCrypto = selectedCryptoInput ? selectedCryptoInput.value : '';
+                    if (!selectedCrypto) {
+                        e.preventDefault();
+                        alert('Please select a cryptocurrency wallet.');
+                        return false;
+                    }
+                } else if (method === 'GIFT_CARD') {
+                    const selectedGiftCard = selectedGiftCardInput ? selectedGiftCardInput.value : '';
+                    if (!selectedGiftCard) {
+                        e.preventDefault();
+                        alert('Please select a gift card.');
+                        return false;
+                    }
+                }
+                
+                return true;
+            });
+        });
+    </script>
+{% endblock %}

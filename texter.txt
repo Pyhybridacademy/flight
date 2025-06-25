@@ -1,0 +1,1828 @@
+flight site
+
+
+models.py
+
+from django.db import models
+from django.contrib.auth.models import AbstractUser
+from datetime import datetime
+import string
+import random
+
+# Your existing models remain the same...
+class User(AbstractUser):
+    def __str__(self):
+        return f"{self.id}: {self.first_name} {self.last_name}"
+
+class Place(models.Model):
+    city = models.CharField(max_length=64)
+    airport = models.CharField(max_length=64)
+    code = models.CharField(max_length=3)
+    country = models.CharField(max_length=64)
+
+    def __str__(self):
+        return f"{self.city}, {self.country} ({self.code})"
+
+class Week(models.Model):
+    number = models.IntegerField()
+    name = models.CharField(max_length=16)
+
+    def __str__(self):
+        return f"{self.name} ({self.number})"
+
+class Flight(models.Model):
+    origin = models.ForeignKey(Place, on_delete=models.CASCADE, related_name="departures")
+    destination = models.ForeignKey(Place, on_delete=models.CASCADE, related_name="arrivals")
+    depart_time = models.TimeField(auto_now=False, auto_now_add=False)
+    depart_day = models.ManyToManyField(Week, related_name="flights_of_the_day")
+    duration = models.DurationField(null=True)
+    arrival_time = models.TimeField(auto_now=False, auto_now_add=False)
+    plane = models.CharField(max_length=24)
+    airline = models.CharField(max_length=64)
+    economy_fare = models.FloatField(null=True)
+    business_fare = models.FloatField(null=True)
+    first_fare = models.FloatField(null=True)
+
+    def __str__(self):
+        return f"{self.id}: {self.origin} to {self.destination}"
+
+GENDER = (
+    ('male','MALE'),
+    ('female','FEMALE')
+)
+
+class Passenger(models.Model):
+    first_name = models.CharField(max_length=64, blank=True)
+    last_name = models.CharField(max_length=64, blank=True)
+    gender = models.CharField(max_length=20, choices=GENDER, blank=True)
+
+    def __str__(self):
+        return f"Passenger: {self.first_name} {self.last_name}, {self.gender}"
+
+SEAT_CLASS = (
+    ('economy', 'Economy'),
+    ('business', 'Business'),
+    ('first', 'First')
+)
+
+TICKET_STATUS =(
+    ('PENDING', 'Pending'),
+    ('CONFIRMED', 'Confirmed'),
+    ('CANCELLED', 'Cancelled')
+)
+
+# New models for crypto and gift card payments
+CRYPTO_TYPES = (
+    ('BTC', 'Bitcoin'),
+    ('ETH', 'Ethereum'),
+    ('USDT', 'Tether'),
+    ('BNB', 'Binance Coin'),
+    ('ADA', 'Cardano'),
+    ('DOT', 'Polkadot'),
+    ('XRP', 'Ripple'),
+    ('LTC', 'Litecoin'),
+)
+
+class CryptoWallet(models.Model):
+    crypto_type = models.CharField(max_length=10, choices=CRYPTO_TYPES)
+    wallet_address = models.CharField(max_length=255)
+    wallet_name = models.CharField(max_length=100, blank=True)
+    qr_code = models.ImageField(upload_to='crypto_qr/', blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.crypto_type} - {self.wallet_address[:20]}..."
+
+    class Meta:
+        unique_together = ['crypto_type', 'wallet_address']
+
+GIFT_CARD_STATUS = (
+    ('PENDING', 'Pending Validation'),
+    ('APPROVED', 'Approved'),
+    ('REJECTED', 'Rejected'),
+    ('USED', 'Used'),
+)
+
+class GiftCard(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="gift_cards")
+    card_image = models.ImageField(upload_to='gift_cards/')
+    card_number = models.CharField(max_length=50, blank=True)
+    amount = models.FloatField()
+    status = models.CharField(max_length=20, choices=GIFT_CARD_STATUS, default='PENDING')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    validated_at = models.DateTimeField(blank=True, null=True)
+    validated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="validated_cards")
+    admin_notes = models.TextField(blank=True)
+
+    def __str__(self):
+        return f"Gift Card {self.id} - ${self.amount} ({self.status})"
+
+PAYMENT_METHOD = (
+    ('CARD', 'Credit/Debit Card'),
+    ('CRYPTO', 'Cryptocurrency'),
+    ('GIFT_CARD', 'Gift Card'),
+)
+
+PAYMENT_STATUS = (
+    ('PENDING', 'Pending'),
+    ('COMPLETED', 'Completed'),
+    ('FAILED', 'Failed'),
+    ('CANCELLED', 'Cancelled'),
+)
+
+class Payment(models.Model):
+    ticket = models.OneToOneField('Ticket', on_delete=models.CASCADE, related_name='payment')
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD)
+    amount = models.FloatField()
+    status = models.CharField(max_length=20, choices=PAYMENT_STATUS, default='PENDING')
+    
+    # For crypto payments
+    crypto_wallet = models.ForeignKey(CryptoWallet, on_delete=models.SET_NULL, null=True, blank=True)
+    crypto_transaction_hash = models.CharField(max_length=255, blank=True)
+    crypto_amount = models.FloatField(null=True, blank=True)
+    
+    # For gift card payments
+    gift_card = models.ForeignKey(GiftCard, on_delete=models.SET_NULL, null=True, blank=True)
+    
+    # For card payments (existing)
+    card_number = models.CharField(max_length=19, blank=True)
+    card_holder_name = models.CharField(max_length=100, blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    
+    def __str__(self):
+        return f"Payment {self.id} - {self.payment_method} - ${self.amount}"
+
+# Update the existing Ticket model
+class Ticket(models.Model):
+    user = models.ForeignKey(User,on_delete=models.CASCADE,related_name="bookings", blank=True, null=True)
+    ref_no = models.CharField(max_length=6, unique=True)
+    passengers = models.ManyToManyField(Passenger, related_name="flight_tickets")
+    flight = models.ForeignKey(Flight, on_delete=models.CASCADE, related_name="tickets", blank=True, null=True)
+    flight_ddate = models.DateField(blank=True, null=True)
+    flight_adate = models.DateField(blank=True, null=True)
+    flight_fare = models.FloatField(blank=True,null=True)
+    other_charges = models.FloatField(blank=True,null=True)
+    coupon_used = models.CharField(max_length=15,blank=True)
+    coupon_discount = models.FloatField(default=0.0)
+    total_fare = models.FloatField(blank=True, null=True)
+    seat_class = models.CharField(max_length=20, choices=SEAT_CLASS)
+    booking_date = models.DateTimeField(default=datetime.now)
+    mobile = models.CharField(max_length=20,blank=True)
+    email = models.EmailField(max_length=45, blank=True)
+    status = models.CharField(max_length=45, choices=TICKET_STATUS)
+
+    def __str__(self):
+        return self.ref_no
+
+
+constant.py
+FEE = 100.0
+
+
+urls.py
+
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path("", views.index, name="index"),
+    path("login", views.login_view, name="login"),
+    path("logout", views.logout_view, name="logout"),
+    path("register", views.register_view, name="register"),
+    path("query/places/<str:q>", views.query, name="query"),
+    path("flight", views.flight, name="flight"),
+    path("review", views.review, name="review"),
+    path("flight/ticket/book", views.book, name="book"),
+    path("flight/ticket/payment", views.payment, name="payment"),
+    path('flight/ticket/api/<str:ref>', views.ticket_data, name="ticketdata"),
+    path('flight/ticket/print',views.get_ticket, name="getticket"),
+    path('flight/bookings', views.bookings, name="bookings"),
+    path('flight/ticket/cancel', views.cancel_ticket, name="cancelticket"),
+    path('flight/ticket/resume', views.resume_booking, name="resumebooking"),
+    path('contact', views.contact, name="contact"),
+    path('privacy-policy', views.privacy_policy, name="privacypolicy"),
+    path('terms-and-conditions', views.terms_and_conditions, name="termsandconditions"),
+    path('about-us', views.about_us, name="aboutus"),
+    
+    # New payment-related URLs
+    path('gift-cards/', views.user_gift_cards, name="user_gift_cards"),
+    path('upload-gift-card/', views.upload_gift_card, name="upload_gift_card"),
+    path('confirm-crypto-payment/', views.confirm_crypto_payment, name="confirm_crypto_payment"),
+]
+
+
+views.py
+
+from django.shortcuts import render, HttpResponse, HttpResponseRedirect, get_object_or_404
+from django.urls import reverse
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth import authenticate, login, logout
+from django.contrib import messages
+from django.core.files.storage import FileSystemStorage
+from django.utils import timezone
+
+from datetime import datetime
+import math
+from .models import *
+from .forms import GiftCardUploadForm, CryptoPaymentForm
+from capstone.utils import render_to_pdf, createticket
+
+#Fee and Surcharge variable
+from .constant import FEE
+from flight.utils import createWeekDays, addPlaces, addDomesticFlights, addInternationalFlights
+
+try:
+    if len(Week.objects.all()) == 0:
+        createWeekDays()
+
+    if len(Place.objects.all()) == 0:
+        addPlaces()
+
+    if len(Flight.objects.all()) == 0:
+        print("Do you want to add flights in the Database? (y/n)")
+        if input().lower() in ['y', 'yes']:
+            addDomesticFlights()
+            addInternationalFlights()
+except:
+    pass
+
+# Create your views here.
+
+def index(request):
+    min_date = f"{datetime.now().date().year}-{datetime.now().date().month}-{datetime.now().date().day}"
+    max_date = f"{datetime.now().date().year if (datetime.now().date().month+3)<=12 else datetime.now().date().year+1}-{(datetime.now().date().month + 3) if (datetime.now().date().month+3)<=12 else (datetime.now().date().month+3-12)}-{datetime.now().date().day}"
+    if request.method == 'POST':
+        origin = request.POST.get('Origin')
+        destination = request.POST.get('Destination')
+        depart_date = request.POST.get('DepartDate')
+        seat = request.POST.get('SeatClass')
+        trip_type = request.POST.get('TripType')
+        if(trip_type == '1'):
+            return render(request, 'flight/index.html', {
+            'origin': origin,
+            'destination': destination,
+            'depart_date': depart_date,
+            'seat': seat.lower(),
+            'trip_type': trip_type
+        })
+        elif(trip_type == '2'):
+            return_date = request.POST.get('ReturnDate')
+            return render(request, 'flight/index.html', {
+            'min_date': min_date,
+            'max_date': max_date,
+            'origin': origin,
+            'destination': destination,
+            'depart_date': depart_date,
+            'seat': seat.lower(),
+            'trip_type': trip_type,
+            'return_date': return_date
+        })
+    else:
+        return render(request, 'flight/index.html', {
+            'min_date': min_date,
+            'max_date': max_date
+        })
+
+def login_view(request):
+    if request.method == "POST":
+        username = request.POST["username"]
+        password = request.POST["password"]
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)
+            return HttpResponseRedirect(reverse("index"))
+            
+        else:
+            return render(request, "flight/login.html", {
+                "message": "Invalid username and/or password."
+            })
+    else:
+        if request.user.is_authenticated:
+            return HttpResponseRedirect(reverse('index'))
+        else:
+            return render(request, "flight/login.html")
+
+def register_view(request):
+    if request.method == "POST":
+        fname = request.POST['firstname']
+        lname = request.POST['lastname']
+        username = request.POST["username"]
+        email = request.POST["email"]
+
+        # Ensuring password matches confirmation
+        password = request.POST["password"]
+        confirmation = request.POST["confirmation"]
+        if password != confirmation:
+            return render(request, "flight/register.html", {
+                "message": "Passwords must match."
+            })
+
+        # Attempt to create new user
+        try:
+            user = User.objects.create_user(username, email, password)
+            user.first_name = fname
+            user.last_name = lname
+            user.save()
+        except:
+            return render(request, "flight/register.html", {
+                "message": "Username already taken."
+            })
+        login(request, user)
+        return HttpResponseRedirect(reverse("index"))
+    else:
+        return render(request, "flight/register.html")
+
+def logout_view(request):
+    logout(request)
+    return HttpResponseRedirect(reverse("index"))
+
+def query(request, q):
+    places = Place.objects.all()
+    filters = []
+    q = q.lower()
+    for place in places:
+        if (q in place.city.lower()) or (q in place.airport.lower()) or (q in place.code.lower()) or (q in place.country.lower()):
+            filters.append(place)
+    return JsonResponse([{'code':place.code, 'city':place.city, 'country': place.country} for place in filters], safe=False)
+
+@csrf_exempt
+def flight(request):
+    o_place = request.GET.get('Origin')
+    d_place = request.GET.get('Destination')
+    trip_type = request.GET.get('TripType')
+    departdate = request.GET.get('DepartDate')
+    depart_date = datetime.strptime(departdate, "%Y-%m-%d")
+    return_date = None
+    if trip_type == '2':
+        returndate = request.GET.get('ReturnDate')
+        return_date = datetime.strptime(returndate, "%Y-%m-%d")
+        flightday2 = Week.objects.get(number=return_date.weekday()) ##
+        origin2 = Place.objects.get(code=d_place.upper())   ##
+        destination2 = Place.objects.get(code=o_place.upper())  ##
+    seat = request.GET.get('SeatClass')
+
+    flightday = Week.objects.get(number=depart_date.weekday())
+    destination = Place.objects.get(code=d_place.upper())
+    origin = Place.objects.get(code=o_place.upper())
+    if seat == 'economy':
+        flights = Flight.objects.filter(depart_day=flightday,origin=origin,destination=destination).exclude(economy_fare=0).order_by('economy_fare')
+        try:
+            max_price = flights.last().economy_fare
+            min_price = flights.first().economy_fare
+        except:
+            max_price = 0
+            min_price = 0
+
+        if trip_type == '2':    ##
+            flights2 = Flight.objects.filter(depart_day=flightday2,origin=origin2,destination=destination2).exclude(economy_fare=0).order_by('economy_fare')    ##
+            try:
+                max_price2 = flights2.last().economy_fare   ##
+                min_price2 = flights2.first().economy_fare  ##
+            except:
+                max_price2 = 0  ##
+                min_price2 = 0  ##
+                
+    elif seat == 'business':
+        flights = Flight.objects.filter(depart_day=flightday,origin=origin,destination=destination).exclude(business_fare=0).order_by('business_fare')
+        try:
+            max_price = flights.last().business_fare
+            min_price = flights.first().business_fare
+        except:
+            max_price = 0
+            min_price = 0
+
+        if trip_type == '2':    ##
+            flights2 = Flight.objects.filter(depart_day=flightday2,origin=origin2,destination=destination2).exclude(business_fare=0).order_by('business_fare')    ##
+            try:
+                max_price2 = flights2.last().business_fare   ##
+                min_price2 = flights2.first().business_fare  ##
+            except:
+                max_price2 = 0  ##
+                min_price2 = 0  ##
+
+    elif seat == 'first':
+        flights = Flight.objects.filter(depart_day=flightday,origin=origin,destination=destination).exclude(first_fare=0).order_by('first_fare')
+        try:
+            max_price = flights.last().first_fare
+            min_price = flights.first().first_fare
+        except:
+            max_price = 0
+            min_price = 0
+            
+        if trip_type == '2':    ##
+            flights2 = Flight.objects.filter(depart_day=flightday2,origin=origin2,destination=destination2).exclude(first_fare=0).order_by('first_fare')
+            try:
+                max_price2 = flights2.last().first_fare   ##
+                min_price2 = flights2.first().first_fare  ##
+            except:
+                max_price2 = 0  ##
+                min_price2 = 0  ##    ##
+
+    #print(calendar.day_name[depart_date.weekday()])
+    if trip_type == '2':
+        return render(request, "flight/search.html", {
+            'flights': flights,
+            'origin': origin,
+            'destination': destination,
+            'flights2': flights2,   ##
+            'origin2': origin2,    ##
+            'destination2': destination2,    ##
+            'seat': seat.capitalize(),
+            'trip_type': trip_type,
+            'depart_date': depart_date,
+            'return_date': return_date,
+            'max_price': math.ceil(max_price/100)*100,
+            'min_price': math.floor(min_price/100)*100,
+            'max_price2': math.ceil(max_price2/100)*100,    ##
+            'min_price2': math.floor(min_price2/100)*100    ##
+        })
+    else:
+        return render(request, "flight/search.html", {
+            'flights': flights,
+            'origin': origin,
+            'destination': destination,
+            'seat': seat.capitalize(),
+            'trip_type': trip_type,
+            'depart_date': depart_date,
+            'return_date': return_date,
+            'max_price': math.ceil(max_price/100)*100,
+            'min_price': math.floor(min_price/100)*100
+        })
+
+def review(request):
+    flight_1 = request.GET.get('flight1Id')
+    date1 = request.GET.get('flight1Date')
+    seat = request.GET.get('seatClass')
+    round_trip = False
+    if request.GET.get('flight2Id'):
+        round_trip = True
+
+    if round_trip:
+        flight_2 = request.GET.get('flight2Id')
+        date2 = request.GET.get('flight2Date')
+
+    if request.user.is_authenticated:
+        flight1 = Flight.objects.get(id=flight_1)
+        flight1ddate = datetime(int(date1.split('-')[2]),int(date1.split('-')[1]),int(date1.split('-')[0]),flight1.depart_time.hour,flight1.depart_time.minute)
+        flight1adate = (flight1ddate + flight1.duration)
+        flight2 = None
+        flight2ddate = None
+        flight2adate = None
+        if round_trip:
+            flight2 = Flight.objects.get(id=flight_2)
+            flight2ddate = datetime(int(date2.split('-')[2]),int(date2.split('-')[1]),int(date2.split('-')[0]),flight2.depart_time.hour,flight2.depart_time.minute)
+            flight2adate = (flight2ddate + flight2.duration)
+        #print("//////////////////////////////////")
+        #print(f"flight1ddate: {flight1adate-flight1ddate}")
+        #print("//////////////////////////////////")
+        if round_trip:
+            return render(request, "flight/book.html", {
+                'flight1': flight1,
+                'flight2': flight2,
+                "flight1ddate": flight1ddate,
+                "flight1adate": flight1adate,
+                "flight2ddate": flight2ddate,
+                "flight2adate": flight2adate,
+                "seat": seat,
+                "fee": FEE
+            })
+        return render(request, "flight/book.html", {
+            'flight1': flight1,
+            "flight1ddate": flight1ddate,
+            "flight1adate": flight1adate,
+            "seat": seat,
+            "fee": FEE
+        })
+    else:
+        return HttpResponseRedirect(reverse("login"))
+
+def book(request):
+    if request.method == 'POST':
+        if request.user.is_authenticated:
+            flight_1 = request.POST.get('flight1')
+            flight_1date = request.POST.get('flight1Date')
+            flight_1class = request.POST.get('flight1Class')
+            f2 = False
+            if request.POST.get('flight2'):
+                flight_2 = request.POST.get('flight2')
+                flight_2date = request.POST.get('flight2Date')
+                flight_2class = request.POST.get('flight2Class')
+                f2 = True
+            countrycode = request.POST['countryCode']
+            mobile = request.POST['mobile']
+            email = request.POST['email']
+            flight1 = Flight.objects.get(id=flight_1)
+            if f2:
+                flight2 = Flight.objects.get(id=flight_2)
+            passengerscount = request.POST['passengersCount']
+            passengers=[]
+            for i in range(1,int(passengerscount)+1):
+                fname = request.POST[f'passenger{i}FName']
+                lname = request.POST[f'passenger{i}LName']
+                gender = request.POST[f'passenger{i}Gender']
+                passengers.append(Passenger.objects.create(first_name=fname,last_name=lname,gender=gender.lower()))
+            coupon = request.POST.get('coupon')
+            
+            try:
+                ticket1 = createticket(request.user,passengers,passengerscount,flight1,flight_1date,flight_1class,coupon,countrycode,email,mobile)
+                if f2:
+                    ticket2 = createticket(request.user,passengers,passengerscount,flight2,flight_2date,flight_2class,coupon,countrycode,email,mobile)
+
+                if(flight_1class == 'Economy'):
+                    if f2:
+                        fare = (flight1.economy_fare*int(passengerscount))+(flight2.economy_fare*int(passengerscount))
+                    else:
+                        fare = flight1.economy_fare*int(passengerscount)
+                elif (flight_1class == 'Business'):
+                    if f2:
+                        fare = (flight1.business_fare*int(passengerscount))+(flight2.business_fare*int(passengerscount))
+                    else:
+                        fare = flight1.business_fare*int(passengerscount)
+                elif (flight_1class == 'First'):
+                    if f2:
+                        fare = (flight1.first_fare*int(passengerscount))+(flight2.first_fare*int(passengerscount))
+                    else:
+                        fare = flight1.first_fare*int(passengerscount)
+            except Exception as e:
+                return HttpResponse(e)
+            
+            # Get available payment methods for the payment page
+            crypto_wallets = CryptoWallet.objects.filter(is_active=True)
+            user_gift_cards = GiftCard.objects.filter(
+                user=request.user, 
+                status='APPROVED',
+                amount__gt=0
+            )
+
+            context = {
+                'fare': fare + FEE,
+                'ticket': ticket1.id,
+                'crypto_wallets': crypto_wallets,
+                'gift_cards': user_gift_cards
+            }
+            
+            if f2:
+                context['ticket2'] = ticket2.id
+                
+            return render(request, "flight/payment.html", context)
+        else:
+            return HttpResponseRedirect(reverse("login"))
+    else:
+        return HttpResponse("Method must be post.")
+
+def payment(request):
+    if request.user.is_authenticated:
+        if request.method == 'POST':
+            ticket_id = request.POST['ticket']
+            t2 = False
+            if request.POST.get('ticket2'):
+                ticket2_id = request.POST['ticket2']
+                t2 = True
+            
+            # Fix the fare handling - get from POST or calculate from ticket
+            fare_from_post = request.POST.get('fare')
+            if fare_from_post:
+                try:
+                    # Remove currency symbols and convert to float
+                    fare_str = str(fare_from_post).replace('$', '').replace(',', '').strip()
+                    fare = float(fare_str)
+                except (ValueError, TypeError):
+                    fare = None
+            else:
+                fare = None
+            
+            # If fare is still None, calculate it from the ticket
+            if fare is None:
+                try:
+                    ticket = Ticket.objects.get(id=ticket_id)
+                    fare = float(ticket.total_fare) if hasattr(ticket, 'total_fare') else 0.0
+                except:
+                    fare = 0.0
+            
+            payment_method = request.POST.get('payment_method', 'CARD')
+            
+            try:
+                ticket = Ticket.objects.get(id=ticket_id)
+                
+                if payment_method == 'CARD':
+                    # Handle traditional card payment
+                    card_number = request.POST.get('cardNumber', '')
+                    card_holder_name = request.POST.get('cardHolderName', '')
+                    exp_month = request.POST.get('expMonth', '')
+                    exp_year = request.POST.get('expYear', '')
+                    cvv = request.POST.get('cvv', '')
+                    
+                    # Validate required fields
+                    if not all([card_number, card_holder_name, exp_month, exp_year, cvv]):
+                        messages.error(request, 'Please fill in all card details')
+                        return HttpResponseRedirect(request.META.get('HTTP_REFERER', '/'))
+                    
+                    # Create payment record
+                    payment = Payment.objects.create(
+                        ticket=ticket,
+                        payment_method='CARD',
+                        amount=fare,
+                        card_number=card_number[-4:] if len(card_number) >= 4 else card_number,
+                        card_holder_name=card_holder_name,
+                        status='COMPLETED'
+                    )
+                    
+                    ticket.status = 'CONFIRMED'
+                    ticket.booking_date = datetime.now()
+                    ticket.save()
+                    
+                elif payment_method == 'CRYPTO':
+                    # Handle crypto payment
+                    crypto_wallet_id = request.POST.get('crypto_wallet')
+                    if not crypto_wallet_id:
+                        messages.error(request, 'Please select a cryptocurrency wallet')
+                        return HttpResponseRedirect(request.META.get('HTTP_REFERER', '/'))
+                    
+                    try:
+                        crypto_wallet = CryptoWallet.objects.get(id=crypto_wallet_id)
+                    except CryptoWallet.DoesNotExist:
+                        messages.error(request, 'Selected cryptocurrency wallet not found')
+                        return HttpResponseRedirect(request.META.get('HTTP_REFERER', '/'))
+                    
+                    payment = Payment.objects.create(
+                        ticket=ticket,
+                        payment_method='CRYPTO',
+                        amount=fare,
+                        crypto_wallet=crypto_wallet,
+                        status='PENDING'
+                    )
+                    
+                    return render(request, 'flight/crypto_payment.html', {
+                        'ticket': ticket,
+                        'payment': payment,
+                        'crypto_wallet': crypto_wallet,
+                        'amount': fare
+                    })
+                    
+                elif payment_method == 'GIFT_CARD':
+                    # Handle gift card payment
+                    gift_card_id = request.POST.get('gift_card')
+                    if not gift_card_id:
+                        messages.error(request, 'Please select a gift card')
+                        return HttpResponseRedirect(request.META.get('HTTP_REFERER', '/'))
+                    
+                    try:
+                        gift_card = GiftCard.objects.get(id=gift_card_id, user=request.user, status='APPROVED')
+                    except GiftCard.DoesNotExist:
+                        messages.error(request, 'Selected gift card not found or not approved')
+                        return HttpResponseRedirect(request.META.get('HTTP_REFERER', '/'))
+                    
+                    if gift_card.amount >= fare:
+                        payment = Payment.objects.create(
+                            ticket=ticket,
+                            payment_method='GIFT_CARD',
+                            amount=fare,
+                            gift_card=gift_card,
+                            status='COMPLETED'
+                        )
+                        
+                        # Update gift card
+                        gift_card.amount -= fare
+                        if gift_card.amount <= 0:
+                            gift_card.status = 'USED'
+                        gift_card.save()
+                        
+                        ticket.status = 'CONFIRMED'
+                        ticket.booking_date = datetime.now()
+                        ticket.save()
+                    else:
+                        messages.error(request, f'Insufficient gift card balance. Available: ${gift_card.amount:.2f}, Required: ${fare:.2f}')
+                        return HttpResponseRedirect(request.META.get('HTTP_REFERER', '/'))
+
+                # Handle second ticket if exists
+                if t2:
+                    try:
+                        ticket2 = Ticket.objects.get(id=ticket2_id)
+                        ticket2.status = 'CONFIRMED'
+                        ticket2.booking_date = datetime.now()
+                        ticket2.save()
+                        return render(request, 'flight/payment_process.html', {
+                            'ticket1': ticket,
+                            'ticket2': ticket2
+                        })
+                    except Ticket.DoesNotExist:
+                        pass
+                
+                return render(request, 'flight/payment_process.html', {
+                    'ticket1': ticket,
+                    'ticket2': None
+                })
+                
+            except Ticket.DoesNotExist:
+                messages.error(request, 'Ticket not found')
+                return HttpResponseRedirect(reverse('bookings'))
+            except Exception as e:
+                messages.error(request, f'Payment processing error: {str(e)}')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER', '/'))
+        else:
+            # GET request - show payment form
+            ticket_id = request.GET.get('ticket')
+            ticket2_id = request.GET.get('ticket2')
+            fare = request.GET.get('fare')
+            
+            if not ticket_id:
+                return HttpResponseRedirect(reverse('bookings'))
+            
+            try:
+                ticket = get_object_or_404(Ticket, id=ticket_id)
+                
+                # Calculate fare if not provided
+                if not fare:
+                    fare = getattr(ticket, 'total_fare', 0)
+                
+                # Get available payment methods
+                crypto_wallets = CryptoWallet.objects.filter(is_active=True)
+                user_gift_cards = GiftCard.objects.filter(
+                    user=request.user, 
+                    status='APPROVED',
+                    amount__gt=0
+                )
+                
+                context = {
+                    'ticket': ticket_id,
+                    'fare': fare,
+                    'crypto_wallets': crypto_wallets,
+                    'gift_cards': user_gift_cards
+                }
+                
+                if ticket2_id:
+                    context['ticket2'] = ticket2_id
+                
+                return render(request, 'flight/payment.html', context)
+            except:
+                messages.error(request, 'Ticket not found')
+                return HttpResponseRedirect(reverse('bookings'))
+    else:
+        return HttpResponseRedirect(reverse('login'))
+
+@csrf_exempt
+def upload_gift_card(request):
+    if request.method == 'POST' and request.user.is_authenticated:
+        form = GiftCardUploadForm(request.POST, request.FILES)
+        if form.is_valid():
+            gift_card = form.save(commit=False)
+            gift_card.user = request.user
+            gift_card.save()
+            messages.success(request, 'Gift card uploaded successfully! Please wait for admin validation.')
+            return JsonResponse({'success': True, 'message': 'Gift card uploaded successfully!'})
+        else:
+            return JsonResponse({'success': False, 'errors': form.errors})
+    
+    return JsonResponse({'success': False, 'message': 'Invalid request'})
+
+@csrf_exempt
+def confirm_crypto_payment(request):
+    if request.method == 'POST' and request.user.is_authenticated:
+        payment_id = request.POST.get('payment_id')
+        transaction_hash = request.POST.get('transaction_hash')
+        crypto_amount = request.POST.get('crypto_amount')
+        
+        try:
+            payment = Payment.objects.get(id=payment_id, ticket__user=request.user)
+            payment.crypto_transaction_hash = transaction_hash
+            payment.crypto_amount = float(crypto_amount)
+            payment.status = 'PENDING'  # Admin will verify
+            payment.save()
+            
+            messages.success(request, 'Crypto payment submitted! Please wait for verification.')
+            return JsonResponse({'success': True})
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)})
+    
+    return JsonResponse({'success': False, 'message': 'Invalid request'})
+
+def user_gift_cards(request):
+    if request.user.is_authenticated:
+        gift_cards = GiftCard.objects.filter(user=request.user).order_by('-uploaded_at')
+        return render(request, 'flight/gift_cards.html', {
+            'gift_cards': gift_cards,
+            'form': GiftCardUploadForm()
+        })
+    else:
+        return HttpResponseRedirect(reverse('login'))
+
+def ticket_data(request, ref):
+    ticket = Ticket.objects.get(ref_no=ref)
+    return JsonResponse({
+        'ref': ticket.ref_no,
+        'from': ticket.flight.origin.code,
+        'to': ticket.flight.destination.code,
+        'flight_date': ticket.flight_ddate,
+        'status': ticket.status
+    })
+
+@csrf_exempt
+def get_ticket(request):
+    ref = request.GET.get("ref")
+    ticket1 = Ticket.objects.get(ref_no=ref)
+    data = {
+        'ticket1':ticket1,
+        'current_year': datetime.now().year
+    }
+    pdf = render_to_pdf('flight/ticket.html', data)
+    return HttpResponse(pdf, content_type='application/pdf')
+
+def bookings(request):
+    if request.user.is_authenticated:
+        tickets = Ticket.objects.filter(user=request.user).order_by('-booking_date')
+        return render(request, 'flight/bookings.html', {
+            'page': 'bookings',
+            'tickets': tickets
+        })
+    else:
+        return HttpResponseRedirect(reverse('login'))
+
+@csrf_exempt
+def cancel_ticket(request):
+    if request.method == 'POST':
+        if request.user.is_authenticated:
+            ref = request.POST['ref']
+            try:
+                ticket = Ticket.objects.get(ref_no=ref)
+                if ticket.user == request.user:
+                    ticket.status = 'CANCELLED'
+                    ticket.save()
+                    return JsonResponse({'success': True})
+                else:
+                    return JsonResponse({
+                        'success': False,
+                        'error': "User unauthorised"
+                    })
+            except Exception as e:
+                return JsonResponse({
+                    'success': False,
+                    'error': e
+                })
+        else:
+            return HttpResponse("User unauthorised")
+    else:
+        return HttpResponse("Method must be POST.")
+
+def resume_booking(request):
+    if request.method == 'POST':
+        if request.user.is_authenticated:
+            ref = request.POST['ref']
+            ticket = Ticket.objects.get(ref_no=ref)
+            if ticket.user == request.user:
+                # Get available payment methods
+                crypto_wallets = CryptoWallet.objects.filter(is_active=True)
+                user_gift_cards = GiftCard.objects.filter(
+                    user=request.user, 
+                    status='APPROVED',
+                    amount__gt=0
+                )
+                
+                return render(request, "flight/payment.html", {
+                    'fare': ticket.total_fare,
+                    'ticket': ticket.id,
+                    'crypto_wallets': crypto_wallets,
+                    'gift_cards': user_gift_cards
+                })
+            else:
+                return HttpResponse("User unauthorised")
+        else:
+            return HttpResponseRedirect(reverse("login"))
+    else:
+        return HttpResponse("Method must be post.")
+
+def contact(request):
+    return render(request, 'flight/contact.html')
+
+def privacy_policy(request):
+    return render(request, 'flight/privacy-policy.html')
+
+def terms_and_conditions(request):
+    return render(request, 'flight/terms.html')
+
+def about_us(request):
+    return render(request, 'flight/about.html')
+
+
+admin.py
+
+from django.contrib import admin
+from django.utils import timezone
+from .models import *
+
+# Register your existing models here
+admin.site.register(User)
+admin.site.register(Place)
+admin.site.register(Flight)
+admin.site.register(Week)
+admin.site.register(Passenger)
+admin.site.register(Ticket)
+
+@admin.register(CryptoWallet)
+class CryptoWalletAdmin(admin.ModelAdmin):
+    list_display = ['crypto_type', 'wallet_address', 'is_active', 'created_at']
+    list_filter = ['crypto_type', 'is_active', 'created_at']
+    search_fields = ['wallet_address']
+    readonly_fields = ['created_at']
+    
+    fieldsets = (
+        ('Wallet Information', {
+            'fields': ('crypto_type', 'wallet_address', 'qr_code')
+        }),
+        ('Status', {
+            'fields': ('is_active',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at',),
+            'classes': ('collapse',)
+        }),
+    )
+
+@admin.register(GiftCard)
+class GiftCardAdmin(admin.ModelAdmin):
+    list_display = ['user', 'amount', 'status', 'uploaded_at', 'validated_at']
+    list_filter = ['status', 'uploaded_at', 'validated_at']
+    search_fields = ['user__username', 'user__email', 'card_number']
+    readonly_fields = ['uploaded_at', 'validated_at']
+    
+    fieldsets = (
+        ('Card Information', {
+            'fields': ('user', 'card_image', 'card_number', 'amount')
+        }),
+        ('Validation', {
+            'fields': ('status', 'admin_notes', 'validated_by')
+        }),
+        ('Timestamps', {
+            'fields': ('uploaded_at', 'validated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def save_model(self, request, obj, form, change):
+        if change and 'status' in form.changed_data:
+            if obj.status in ['APPROVED', 'REJECTED']:
+                obj.validated_by = request.user
+                obj.validated_at = timezone.now()
+        super().save_model(request, obj, form, change)
+
+@admin.register(Payment)
+class PaymentAdmin(admin.ModelAdmin):
+    list_display = ['ticket', 'payment_method', 'amount', 'status', 'created_at']
+    list_filter = ['payment_method', 'status', 'created_at']
+    search_fields = ['ticket__ref_no', 'ticket__user__username']
+    readonly_fields = ['created_at']
+    
+    fieldsets = (
+        ('Payment Information', {
+            'fields': ('ticket', 'payment_method', 'amount', 'status')
+        }),
+        ('Card Details', {
+            'fields': ('card_number', 'card_holder_name'),
+            'classes': ('collapse',)
+        }),
+        ('Crypto Details', {
+            'fields': ('crypto_wallet', 'crypto_transaction_hash', 'crypto_amount'),
+            'classes': ('collapse',)
+        }),
+        ('Gift Card Details', {
+            'fields': ('gift_card',),
+            'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at',),
+            'classes': ('collapse',)
+        }),
+    )
+
+
+backoffice
+
+models
+
+from django.db import models
+from django.contrib.auth.models import User
+from flight.models import *
+
+# We'll use the existing models from the flight app
+# This file can be used for any additional backoffice-specific models if needed
+
+class AdminLog(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    action = models.CharField(max_length=200)
+    model_name = models.CharField(max_length=100)
+    object_id = models.CharField(max_length=100)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    details = models.TextField(blank=True)
+    
+    class Meta:
+        ordering = ['-timestamp']
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.action} - {self.model_name}"
+
+class SystemSettings(models.Model):
+    key = models.CharField(max_length=100, unique=True)
+    value = models.TextField()
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "System Setting"
+        verbose_name_plural = "System Settings"
+    
+    def __str__(self):
+        return f"{self.key}: {self.value[:50]}"
+
+
+forms.py
+
+from django import forms
+from django.contrib.auth.models import User
+from flight.models import *
+from .models import SystemSettings
+
+class CryptoWalletForm(forms.ModelForm):
+    class Meta:
+        model = CryptoWallet
+        fields = ['crypto_type', 'wallet_address', 'qr_code', 'is_active']
+        widgets = {
+            'crypto_type': forms.Select(attrs={'class': 'form-control'}),
+            'wallet_address': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Enter wallet address'}),
+            'qr_code': forms.FileInput(attrs={'class': 'form-control-file'}),
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+
+class FlightForm(forms.ModelForm):
+    class Meta:
+        model = Flight
+        fields = '__all__'
+        widgets = {
+            'airline': forms.TextInput(attrs={'class': 'form-control'}),
+            'plane': forms.TextInput(attrs={'class': 'form-control'}),
+            'origin': forms.Select(attrs={'class': 'form-control'}),
+            'destination': forms.Select(attrs={'class': 'form-control'}),
+            'depart_day': forms.Select(attrs={'class': 'form-control'}),
+            'depart_time': forms.TimeInput(attrs={'class': 'form-control', 'type': 'time'}),
+            'arrival_time': forms.TimeInput(attrs={'class': 'form-control', 'type': 'time'}),
+            'duration': forms.TextInput(attrs={'class': 'form-control'}),
+            'economy_fare': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'business_fare': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'first_fare': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+        }
+
+class UserForm(forms.ModelForm):
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'first_name', 'last_name', 'is_active', 'is_staff']
+        widgets = {
+            'username': forms.TextInput(attrs={'class': 'form-control'}),
+            'email': forms.EmailInput(attrs={'class': 'form-control'}),
+            'first_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'last_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'is_staff': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+
+class SystemSettingsForm(forms.ModelForm):
+    class Meta:
+        model = SystemSettings
+        fields = ['key', 'value', 'description']
+        widgets = {
+            'key': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Setting key'}),
+            'value': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'Setting value'}),
+            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': 'Description (optional)'}),
+        }
+
+class PlaceForm(forms.ModelForm):
+    class Meta:
+        model = Place
+        fields = '__all__'
+        widgets = {
+            'city': forms.TextInput(attrs={'class': 'form-control'}),
+            'airport': forms.TextInput(attrs={'class': 'form-control'}),
+            'code': forms.TextInput(attrs={'class': 'form-control', 'maxlength': '3'}),
+            'country': forms.TextInput(attrs={'class': 'form-control'}),
+        }
+
+class GiftCardValidationForm(forms.Form):
+    action = forms.ChoiceField(
+        choices=[('approve', 'Approve'), ('reject', 'Reject')],
+        widget=forms.Select(attrs={'class': 'form-control'})
+    )
+    notes = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'Admin notes (optional)'})
+    )
+
+class PaymentVerificationForm(forms.Form):
+    action = forms.ChoiceField(
+        choices=[('approve', 'Approve'), ('reject', 'Reject')],
+        widget=forms.Select(attrs={'class': 'form-control'})
+    )
+    notes = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'Admin notes (optional)'})
+    )
+
+urls.py
+
+from django.urls import path
+from . import views
+
+app_name = 'backoffice'
+
+urlpatterns = [
+    # Dashboard
+    path('', views.dashboard, name='dashboard'),
+    
+    # User Management
+    path('users/', views.user_management, name='user_management'),
+    path('users/toggle-status/<int:user_id>/', views.toggle_user_status, name='toggle_user_status'),
+    
+    # Flight Management
+    path('flights/', views.flight_management, name='flight_management'),
+    
+    # Booking Management
+    path('bookings/', views.booking_management, name='booking_management'),
+    
+    # Payment Management
+    path('payments/', views.payment_management, name='payment_management'),
+    path('payments/verify-crypto/<int:payment_id>/', views.verify_crypto_payment, name='verify_crypto_payment'),
+    
+    # Crypto Wallet Management
+    path('crypto-wallets/', views.crypto_wallet_management, name='crypto_wallet_management'),
+    path('crypto-wallets/toggle-status/<int:wallet_id>/', views.toggle_wallet_status, name='toggle_wallet_status'),
+    
+    # Gift Card Management
+    path('gift-cards/', views.gift_card_management, name='gift_card_management'),
+    path('gift-cards/validate/<int:card_id>/', views.validate_gift_card, name='validate_gift_card'),
+    
+    # Reports
+    path('reports/', views.reports, name='reports'),
+    
+    # System Settings
+    path('settings/', views.system_settings, name='system_settings'),
+    
+    # Admin Logs
+    path('logs/', views.admin_logs, name='admin_logs'),
+    
+    # AJAX endpoints
+    path('api/dashboard-stats/', views.get_dashboard_stats, name='dashboard_stats'),
+]
+
+
+views.py
+
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib import messages
+from django.http import JsonResponse, HttpResponse
+from django.core.paginator import Paginator
+from django.db.models import Q, Count, Sum
+from django.utils import timezone
+from datetime import datetime, timedelta
+import json
+
+from flight.models import *
+from .models import AdminLog, SystemSettings
+from .forms import *
+
+def is_admin(user):
+    return user.is_staff or user.is_superuser
+
+@login_required
+@user_passes_test(is_admin)
+def dashboard(request):
+    # Dashboard statistics
+    total_users = User.objects.count()
+    total_flights = Flight.objects.count()
+    total_bookings = Ticket.objects.count()
+    total_payments = Payment.objects.count()
+    
+    # Recent activity
+    recent_bookings = Ticket.objects.order_by('-booking_date')[:10]
+    recent_payments = Payment.objects.order_by('-created_at')[:10]
+    
+    # Monthly statistics
+    current_month = timezone.now().replace(day=1)
+    monthly_bookings = Ticket.objects.filter(booking_date__gte=current_month).count()
+    monthly_revenue = Payment.objects.filter(
+        created_at__gte=current_month,
+        status='COMPLETED'
+    ).aggregate(total=Sum('amount'))['total'] or 0
+    
+    # Payment method statistics
+    payment_stats = Payment.objects.values('payment_method').annotate(
+        count=Count('id'),
+        total_amount=Sum('amount')
+    )
+    
+    context = {
+        'total_users': total_users,
+        'total_flights': total_flights,
+        'total_bookings': total_bookings,
+        'total_payments': total_payments,
+        'recent_bookings': recent_bookings,
+        'recent_payments': recent_payments,
+        'monthly_bookings': monthly_bookings,
+        'monthly_revenue': monthly_revenue,
+        'payment_stats': payment_stats,
+    }
+    
+    return render(request, 'backoffice/dashboard.html', context)
+
+@login_required
+@user_passes_test(is_admin)
+def user_management(request):
+    search_query = request.GET.get('search', '')
+    users = User.objects.all()
+    
+    if search_query:
+        users = users.filter(
+            Q(username__icontains=search_query) |
+            Q(email__icontains=search_query) |
+            Q(first_name__icontains=search_query) |
+            Q(last_name__icontains=search_query)
+        )
+    
+    paginator = Paginator(users, 20)
+    page_number = request.GET.get('page')
+    users = paginator.get_page(page_number)
+    
+    return render(request, 'backoffice/user_management.html', {
+        'users': users,
+        'search_query': search_query
+    })
+
+@login_required
+@user_passes_test(is_admin)
+def flight_management(request):
+    search_query = request.GET.get('search', '')
+    flights = Flight.objects.all()
+    
+    if search_query:
+        flights = flights.filter(
+            Q(airline__icontains=search_query) |
+            Q(plane__icontains=search_query) |
+            Q(origin__city__icontains=search_query) |
+            Q(destination__city__icontains=search_query)
+        )
+    
+    paginator = Paginator(flights, 20)
+    page_number = request.GET.get('page')
+    flights = paginator.get_page(page_number)
+    
+    return render(request, 'backoffice/flight_management.html', {
+        'flights': flights,
+        'search_query': search_query
+    })
+
+@login_required
+@user_passes_test(is_admin)
+def booking_management(request):
+    search_query = request.GET.get('search', '')
+    status_filter = request.GET.get('status', '')
+    
+    bookings = Ticket.objects.all().order_by('-booking_date')
+    
+    if search_query:
+        bookings = bookings.filter(
+            Q(ref_no__icontains=search_query) |
+            Q(user__username__icontains=search_query) |
+            Q(user__email__icontains=search_query)
+        )
+    
+    if status_filter:
+        bookings = bookings.filter(status=status_filter)
+    
+    paginator = Paginator(bookings, 20)
+    page_number = request.GET.get('page')
+    bookings = paginator.get_page(page_number)
+    
+    return render(request, 'backoffice/booking_management.html', {
+        'bookings': bookings,
+        'search_query': search_query,
+        'status_filter': status_filter,
+        'status_choices': Ticket.STATUS_CHOICES if hasattr(Ticket, 'STATUS_CHOICES') else []
+    })
+
+@login_required
+@user_passes_test(is_admin)
+def payment_management(request):
+    search_query = request.GET.get('search', '')
+    method_filter = request.GET.get('method', '')
+    status_filter = request.GET.get('status', '')
+    
+    payments = Payment.objects.all().order_by('-created_at')
+    
+    if search_query:
+        payments = payments.filter(
+            Q(ticket__ref_no__icontains=search_query) |
+            Q(ticket__user__username__icontains=search_query)
+        )
+    
+    if method_filter:
+        payments = payments.filter(payment_method=method_filter)
+    
+    if status_filter:
+        payments = payments.filter(status=status_filter)
+    
+    paginator = Paginator(payments, 20)
+    page_number = request.GET.get('page')
+    payments = paginator.get_page(page_number)
+    
+    return render(request, 'backoffice/payment_management.html', {
+        'payments': payments,
+        'search_query': search_query,
+        'method_filter': method_filter,
+        'status_filter': status_filter,
+        'method_choices': Payment.PAYMENT_METHOD_CHOICES if hasattr(Payment, 'PAYMENT_METHOD_CHOICES') else [],
+        'status_choices': Payment.STATUS_CHOICES if hasattr(Payment, 'STATUS_CHOICES') else []
+    })
+
+@login_required
+@user_passes_test(is_admin)
+def crypto_wallet_management(request):
+    wallets = CryptoWallet.objects.all().order_by('-created_at')
+    
+    if request.method == 'POST':
+        form = CryptoWalletForm(request.POST, request.FILES)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Crypto wallet added successfully!')
+            return redirect('backoffice:crypto_wallet_management')
+    else:
+        form = CryptoWalletForm()
+    
+    return render(request, 'backoffice/crypto_wallet_management.html', {
+        'wallets': wallets,
+        'form': form
+    })
+
+@login_required
+@user_passes_test(is_admin)
+def gift_card_management(request):
+    status_filter = request.GET.get('status', '')
+    gift_cards = GiftCard.objects.all().order_by('-uploaded_at')
+    
+    if status_filter:
+        gift_cards = gift_cards.filter(status=status_filter)
+    
+    paginator = Paginator(gift_cards, 20)
+    page_number = request.GET.get('page')
+    gift_cards = paginator.get_page(page_number)
+    
+    return render(request, 'backoffice/gift_card_management.html', {
+        'gift_cards': gift_cards,
+        'status_filter': status_filter,
+        'status_choices': GiftCard.STATUS_CHOICES if hasattr(GiftCard, 'STATUS_CHOICES') else []
+    })
+
+@login_required
+@user_passes_test(is_admin)
+def validate_gift_card(request, card_id):
+    if request.method == 'POST':
+        card = get_object_or_404(GiftCard, id=card_id)
+        action = request.POST.get('action')
+        notes = request.POST.get('notes', '')
+        
+        if action == 'approve':
+            card.status = 'APPROVED'
+            card.validated_by = request.user
+            card.validated_at = timezone.now()
+            card.admin_notes = notes
+            card.save()
+            messages.success(request, f'Gift card #{card.id} approved successfully!')
+        elif action == 'reject':
+            card.status = 'REJECTED'
+            card.validated_by = request.user
+            card.validated_at = timezone.now()
+            card.admin_notes = notes
+            card.save()
+            messages.success(request, f'Gift card #{card.id} rejected successfully!')
+        
+        # Log the action
+        AdminLog.objects.create(
+            user=request.user,
+            action=f'Gift Card {action.title()}',
+            model_name='GiftCard',
+            object_id=str(card.id),
+            details=f'Status changed to {card.status}. Notes: {notes}'
+        )
+    
+    return redirect('backoffice:gift_card_management')
+
+@login_required
+@user_passes_test(is_admin)
+def verify_crypto_payment(request, payment_id):
+    if request.method == 'POST':
+        payment = get_object_or_404(Payment, id=payment_id)
+        action = request.POST.get('action')
+        notes = request.POST.get('notes', '')
+        
+        if action == 'approve':
+            payment.status = 'COMPLETED'
+            payment.ticket.status = 'CONFIRMED'
+            payment.ticket.booking_date = timezone.now()
+            payment.ticket.save()
+            payment.save()
+            messages.success(request, f'Crypto payment #{payment.id} verified and approved!')
+        elif action == 'reject':
+            payment.status = 'FAILED'
+            payment.save()
+            messages.success(request, f'Crypto payment #{payment.id} rejected!')
+        
+        # Log the action
+        AdminLog.objects.create(
+            user=request.user,
+            action=f'Crypto Payment {action.title()}',
+            model_name='Payment',
+            object_id=str(payment.id),
+            details=f'Status changed to {payment.status}. Notes: {notes}'
+        )
+    
+    return redirect('backoffice:payment_management')
+
+@login_required
+@user_passes_test(is_admin)
+def reports(request):
+    # Date range filter
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+    
+    if not start_date:
+        start_date = (timezone.now() - timedelta(days=30)).date()
+    else:
+        start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+    
+    if not end_date:
+        end_date = timezone.now().date()
+    else:
+        end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+    
+    # Revenue report
+    revenue_data = Payment.objects.filter(
+        created_at__date__range=[start_date, end_date],
+        status='COMPLETED'
+    ).aggregate(
+        total_revenue=Sum('amount'),
+        total_transactions=Count('id')
+    )
+    
+    # Booking statistics
+    booking_stats = Ticket.objects.filter(
+        booking_date__date__range=[start_date, end_date]
+    ).values('status').annotate(count=Count('id'))
+    
+    # Payment method breakdown
+    payment_breakdown = Payment.objects.filter(
+        created_at__date__range=[start_date, end_date]
+    ).values('payment_method').annotate(
+        count=Count('id'),
+        total_amount=Sum('amount')
+    )
+    
+    # Popular routes
+    popular_routes = Ticket.objects.filter(
+        booking_date__date__range=[start_date, end_date]
+    ).values(
+        'flight__origin__city',
+        'flight__destination__city'
+    ).annotate(count=Count('id')).order_by('-count')[:10]
+    
+    context = {
+        'start_date': start_date,
+        'end_date': end_date,
+        'revenue_data': revenue_data,
+        'booking_stats': booking_stats,
+        'payment_breakdown': payment_breakdown,
+        'popular_routes': popular_routes,
+    }
+    
+    return render(request, 'backoffice/reports.html', context)
+
+@login_required
+@user_passes_test(is_admin)
+def system_settings(request):
+    settings = SystemSettings.objects.all()
+    
+    if request.method == 'POST':
+        form = SystemSettingsForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Setting saved successfully!')
+            return redirect('backoffice:system_settings')
+    else:
+        form = SystemSettingsForm()
+    
+    return render(request, 'backoffice/system_settings.html', {
+        'settings': settings,
+        'form': form
+    })
+
+@login_required
+@user_passes_test(is_admin)
+def admin_logs(request):
+    logs = AdminLog.objects.all().order_by('-timestamp')
+    
+    paginator = Paginator(logs, 50)
+    page_number = request.GET.get('page')
+    logs = paginator.get_page(page_number)
+    
+    return render(request, 'backoffice/admin_logs.html', {
+        'logs': logs
+    })
+
+# AJAX Views
+@login_required
+@user_passes_test(is_admin)
+def toggle_user_status(request, user_id):
+    if request.method == 'POST':
+        user = get_object_or_404(User, id=user_id)
+        user.is_active = not user.is_active
+        user.save()
+        
+        AdminLog.objects.create(
+            user=request.user,
+            action='User Status Toggle',
+            model_name='User',
+            object_id=str(user.id),
+            details=f'User {user.username} status changed to {"Active" if user.is_active else "Inactive"}'
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'is_active': user.is_active,
+            'message': f'User {user.username} {"activated" if user.is_active else "deactivated"} successfully!'
+        })
+    
+    return JsonResponse({'success': False, 'message': 'Invalid request'})
+
+@login_required
+@user_passes_test(is_admin)
+def toggle_wallet_status(request, wallet_id):
+    if request.method == 'POST':
+        wallet = get_object_or_404(CryptoWallet, id=wallet_id)
+        wallet.is_active = not wallet.is_active
+        wallet.save()
+        
+        AdminLog.objects.create(
+            user=request.user,
+            action='Crypto Wallet Status Toggle',
+            model_name='CryptoWallet',
+            object_id=str(wallet.id),
+            details=f'Wallet {wallet.crypto_type} status changed to {"Active" if wallet.is_active else "Inactive"}'
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'is_active': wallet.is_active,
+            'message': f'Wallet {"activated" if wallet.is_active else "deactivated"} successfully!'
+        })
+    
+    return JsonResponse({'success': False, 'message': 'Invalid request'})
+
+@login_required
+@user_passes_test(is_admin)
+def get_dashboard_stats(request):
+    """AJAX endpoint for dashboard statistics"""
+    stats = {
+        'total_users': User.objects.count(),
+        'total_flights': Flight.objects.count(),
+        'total_bookings': Ticket.objects.count(),
+        'pending_payments': Payment.objects.filter(status='PENDING').count(),
+        'pending_gift_cards': GiftCard.objects.filter(status='PENDING').count(),
+    }
+    
+    return JsonResponse(stats)
+
+
+
+
+base.html
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Flight Booking Admin{% endblock %}</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        .sidebar {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .sidebar .nav-link {
+            color: rgba(255,255,255,0.8);
+            padding: 0.75rem 1rem;
+            margin: 0.25rem 0;
+            border-radius: 0.5rem;
+            transition: all 0.3s;
+        }
+        .sidebar .nav-link:hover,
+        .sidebar .nav-link.active {
+            color: white;
+            background-color: rgba(255,255,255,0.1);
+        }
+        .main-content {
+            background-color: #f8f9fa;
+            min-height: 100vh;
+        }
+        .card {
+            border: none;
+            border-radius: 1rem;
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        }
+        .card-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 1rem 1rem 0 0 !important;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+        }
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+        }
+        .stats-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 1rem;
+        }
+        .table th {
+            border-top: none;
+            background-color: #f8f9fa;
+        }
+        .badge-pending {
+            background-color: #ffc107;
+        }
+        .badge-completed {
+            background-color: #28a745;
+        }
+        .badge-failed {
+            background-color: #dc3545;
+        }
+        .badge-approved {
+            background-color: #28a745;
+        }
+        .badge-rejected {
+            background-color: #dc3545;
+        }
+    </style>
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <nav class="col-md-3 col-lg-2 d-md-block sidebar collapse">
+                <div class="position-sticky pt-3">
+                    <div class="text-center mb-4">
+                        <h4 class="text-white">
+                            <i class="fas fa-plane"></i>
+                            Flight Admin
+                        </h4>
+                    </div>
+                    
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" 
+                               href="{% url 'backoffice:dashboard' %}">
+                                <i class="fas fa-tachometer-alt me-2"></i>
+                                Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if 'user' in request.resolver_match.url_name %}active{% endif %}" 
+                               href="{% url 'backoffice:user_management' %}">
+                                <i class="fas fa-users me-2"></i>
+                                Users
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if 'flight' in request.resolver_match.url_name %}active{% endif %}" 
+                               href="{% url 'backoffice:flight_management' %}">
+                                <i class="fas fa-plane me-2"></i>
+                                Flights
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if 'booking' in request.resolver_match.url_name %}active{% endif %}" 
+                               href="{% url 'backoffice:booking_management' %}">
+                                <i class="fas fa-ticket-alt me-2"></i>
+                                Bookings
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if 'payment' in request.resolver_match.url_name %}active{% endif %}" 
+                               href="{% url 'backoffice:payment_management' %}">
+                                <i class="fas fa-credit-card me-2"></i>
+                                Payments
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if 'crypto' in request.resolver_match.url_name %}active{% endif %}" 
+                               href="{% url 'backoffice:crypto_wallet_management' %}">
+                                <i class="fab fa-bitcoin me-2"></i>
+                                Crypto Wallets
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if 'gift' in request.resolver_match.url_name %}active{% endif %}" 
+                               href="{% url 'backoffice:gift_card_management' %}">
+                                <i class="fas fa-gift me-2"></i>
+                                Gift Cards
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if 'report' in request.resolver_match.url_name %}active{% endif %}" 
+                               href="{% url 'backoffice:reports' %}">
+                                <i class="fas fa-chart-bar me-2"></i>
+                                Reports
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if 'settings' in request.resolver_match.url_name %}active{% endif %}" 
+                               href="{% url 'backoffice:system_settings' %}">
+                                <i class="fas fa-cog me-2"></i>
+                                Settings
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if 'logs' in request.resolver_match.url_name %}active{% endif %}" 
+                               href="{% url 'backoffice:admin_logs' %}">
+                                <i class="fas fa-history me-2"></i>
+                                Admin Logs
+                            </a>
+                        </li>
+                        <li class="nav-item mt-3">
+                            <a class="nav-link" href="{% url 'index' %}">
+                                <i class="fas fa-arrow-left me-2"></i>
+                                Back to Site
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'logout' %}">
+                                <i class="fas fa-sign-out-alt me-2"></i>
+                                Logout
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            <!-- Main content -->
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-content">
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <h1 class="h2">{% block page_title %}Dashboard{% endblock %}</h1>
+                    <div class="btn-toolbar mb-2 mb-md-0">
+                        <div class="btn-group me-2">
+                            {% block page_actions %}{% endblock %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Messages -->
+                {% if messages %}
+                    {% for message in messages %}
+                        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+
+                <!-- Page Content -->
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
+
+
+i only started the admin function called backoffice
+
+the only template i have is base.html help me create the rest templates to fully manage the site

@@ -1,0 +1,79 @@
+{% extends 'backoffice/base.html' %}
+{% block title %}Crypto Wallet Management - Flight Admin{% endblock %}
+{% block page_title %}Crypto Wallet Management{% endblock %}
+{% block content %}
+<div class="card mb-4">
+    <div class="card-header">
+        Add New Crypto Wallet
+    </div>
+    <div class="card-body">
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button type="submit" class="btn btn-primary">Add Wallet</button>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Address</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for wallet in wallets %}
+                    <tr>
+                        <td>{{ wallet.crypto_type }}</td>
+                        <td>{{ wallet.wallet_address|slice:":20 }}...</td>
+                        <td>
+                            <span class="badge badge-{{ wallet.is_active|yesno:'approved,rejected' }}">
+                                {{ wallet.is_active|yesno:'Active,Inactive' }}
+                            </span>
+                        </td>
+                        <td>{{ wallet.created_at|date:"d M Y" }}</td>
+                        <td>
+                            <button class="btn btn-sm btn-primary toggle-wallet-status" 
+                                    data-wallet-id="{{ wallet.id }}"
+                                    data-current-status="{{ wallet.is_active|yesno:'true,false' }}">
+                                Toggle Status
+                            </button>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5">No wallets found</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+    $('.toggle-wallet-status').click(function() {
+        const walletId = $(this).data('wallet-id');
+        $.ajax({
+            url: `{% url 'backoffice:toggle_wallet_status' 0 %}`.replace('0', walletId),
+            method: 'POST',
+            headers: {'X-CSRFToken': '{{ csrf_token }}'},
+            success: function(response) {
+                if (response.success) {
+                    location.reload();
+                }
+            },
+            error: function() {
+                alert('Error toggling wallet status');
+            }
+        });
+    });
+</script>
+{% endblock %}
+{% endblock %}

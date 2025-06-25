@@ -1,0 +1,207 @@
+{% extends 'backoffice/base.html' %}
+{% block title %}Dashboard - Flight Admin{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block content %}
+<div class="row">
+    <!-- Stats Cards -->
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card stats-card text-white">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col">
+                        <h6 class="text-uppercase mb-1">Total Users</h6>
+                        <h3 class="mb-0">{{ total_users }}</h3>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-users fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card stats-card text-white">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col">
+                        <h6 class="text-uppercase mb-1">Total Flights</h6>
+                        <h3 class="mb-0">{{ total_flights }}</h3>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-plane fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card stats-card text-white">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col">
+                        <h6 class="text-uppercase mb-1">Total Bookings</h6>
+                        <h3 class="mb-0">{{ total_bookings }}</h3>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-ticket-alt fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card stats-card text-white">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col">
+                        <h6 class="text-uppercase mb-1">Total Payments</h6>
+                        <h3 class="mb-0">{{ total_payments }}</h3>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-dollar-sign fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Recent Bookings -->
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                Recent Bookings
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Ref No</th>
+                                <th>User</th>
+                                <th>Flight</th>
+                                <th>Status</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for booking in recent_bookings %}
+                            <tr>
+                                <td>{{ booking.ref_no }}</td>
+                                <td>{{ booking.user.username }}</td>
+                                <td>{{ booking.flight.origin }} to {{ booking.flight.destination }}</td>
+                                <td>
+                                    <span class="badge badge-{{ booking.status|lower }}">{{ booking.status }}</span>
+                                </td>
+                                <td>{{ booking.booking_date|date:"d M Y" }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="5">No recent bookings</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Recent Payments -->
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                Recent Payments
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Ticket</th>
+                                <th>Method</th>
+                                <th>Amount</th>
+                                <th>Status</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for payment in recent_payments %}
+                            <tr>
+                                <td>{{ payment.ticket.ref_no }}</td>
+                                <td>{{ payment.payment_method }}</td>
+                                <td>${{ payment.amount|floatformat:2 }}</td>
+                                <td>
+                                    <span class="badge badge-{{ payment.status|lower }}">{{ payment.status }}</span>
+                                </td>
+                                <td>{{ payment.created_at|date:"d M Y" }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="5">No recent payments</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts -->
+<div class="row">
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                Monthly Statistics
+            </div>
+            <div class="card-body">
+                <canvas id="monthlyStatsChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                Payment Methods
+            </div>
+            <div class="card-body">
+                <canvas id="paymentMethodsChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+    // Monthly Stats Chart
+    const monthlyStatsCtx = document.getElementById('monthlyStatsChart').getContext('2d');
+    new Chart(monthlyStatsCtx, {
+        type: 'bar',
+        data: {
+            labels: ['Bookings', 'Revenue'],
+            datasets: [{
+                label: 'This Month',
+                data: [{{ monthly_bookings }}, {{ monthly_revenue }}],
+                backgroundColor: ['#667eea', '#764ba2']
+            }]
+        },
+        options: {
+            scales: {
+                y: { beginAtZero: true }
+            }
+        }
+    });
+
+    // Payment Methods Chart
+    const paymentMethodsCtx = document.getElementById('paymentMethodsChart').getContext('2d');
+    new Chart(paymentMethodsCtx, {
+        type: 'doughnut',
+        data: {
+            labels: [{% for stat in payment_stats %}'{{ stat.payment_method }}',{% endfor %}],
+            datasets: [{
+                data: [{% for stat in payment_stats %}{{ stat.count}},{% endfor %}],
+                backgroundColor: ['#667eea', '#764ba2', '#28a745']
+            }]
+        }
+    });
+</script>
+{% endblock %}
+{% endblock %}

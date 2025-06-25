@@ -1,0 +1,93 @@
+{% extends 'backoffice/base.html' %}
+{% block title %}Payment Management - Flight Admin{% endblock %}
+{% block page_title %}Payment Management{% endblock %}
+{% block content %}
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-3">
+                <input type="text" name="search" class="form-control" placeholder="Search payments..." value="{{ search_query }}">
+            </div>
+            <div class="col-md-3">
+                <select name="method" class="form-control">
+                    <option value="">All Methods</option>
+                    {% for method in method_choices %}
+                    <option value="{{ method.0 }}" {% if method_filter == method.0 %}selected{% endif %}>{{ method.1 }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select name="status" class="form-control">
+                    <option value="">All Statuses</option>
+                    {% for status in status_choices %}
+                    <option value="{{ status.0 }}" {% if status_filter == status.0 %}selected{% endif %}>{{ status.1 }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100">Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Ticket</th>
+                        <th>Method</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                        <th>Date</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for payment in payments %}
+                    <tr>
+                        <td>{{ payment.ticket.ref_no }}</td>
+                        <td>{{ payment.payment_method }}</td>
+                        <td>${{ payment.amount|floatformat:2 }}</td>
+                        <td>
+                            <span class="badge badge-{{ payment.status|lower }}">{{ payment.status }}</span>
+                        </td>
+                        <td>{{ payment.created_at|date:"d M Y" }}</td>
+                        <td>
+                            {% if payment.payment_method == 'CRYPTO' and payment.status == 'PENDING' %}
+                            <a href="#" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#verifyCryptoModal{{ payment.id }}">Verify</a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <!-- Verify Crypto Modal -->
+                    <div class="modal fade" id="verifyCryptoModal{{ payment.id }}" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Verify Crypto Payment #{{ payment.id }}</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <p>Transaction Hash: {{ payment.crypto_transaction_hash }}</p>
+                                    <p>Amount: {{ payment.crypto_amount }}</p>
+                                    <form method="post" action="{% url 'backoffice:verify_crypto_payment' payment.id %}">
+                                        {% csrf_token %}
+                                        {{ payment_verification_form.as_p }}
+                                        <button type="submit" class="btn btn-primary">Submit</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <tr><td colspan="6">No payments found</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include 'backoffice/pagination.html' %}
+    </div>
+</div>
+{% endblock %}

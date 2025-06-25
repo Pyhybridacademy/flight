@@ -1,0 +1,109 @@
+{% extends 'backoffice/base.html' %}
+{% block title %}Reports - Flight Admin{% endblock %}
+{% block page_title %}Reports{% endblock %}
+{% block content %}
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-3">
+                <input type="date" name="start_date" class="form-control" value="{{ start_date }}">
+            </div>
+            <div class="col-md-3">
+                <input type="date" name="end_date" class="form-control" value="{{ end_date }}">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100">Generate</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Revenue Overview -->
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                Revenue Overview
+            </div>
+            <div class="card-body">
+                <h4>Total Revenue: ${{ revenue_data.total_revenue|floatformat:2 }}</h4>
+                <p>Transactions: {{ revenue_data.total_transactions }}</p>
+            </div>
+        </div>
+    </div>
+    <!-- Booking Statistics -->
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                Booking Statistics
+            </div>
+            <div class="card-body">
+                <canvas id="bookingStatsChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Payment Methods -->
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                Payment Method Breakdown
+            </div>
+            <div class="card-body">
+                <canvas id="paymentBreakdownChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <!-- Popular Routes -->
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                Popular Routes
+            </div>
+            <div class="card-body">
+                <ul class="list-group">
+                    {% for route in popular_routes %}
+                    <li class="list-group-item">
+                        {{ route.flight__origin__city }} to {{ route.flight__destination__city }}: {{ route.count }} bookings
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item">No popular routes</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+    // Booking Stats Chart
+    const bookingStatsCtx = document.getElementById('bookingStatsChart').getContext('2d');
+    new Chart(bookingStatsCtx, {
+        type: 'pie',
+        data: {
+            labels: [{% for stat in booking_stats %}'{{ stat.status }}',{% endfor %}],
+            datasets: [{
+                data: [{% for stat in booking_stats %}{{ stat.count}},{% endfor %}],
+                backgroundColor: ['#667eea', '#764ba2', '#dc3545']
+            }]
+        }
+    });
+
+    // Payment Breakdown Chart
+    const paymentBreakdownCtx = document.getElementById('paymentBreakdownChart').getContext('2d');
+    new Chart(paymentBreakdownCtx, {
+        type: 'doughnut',
+        data: {
+            labels: [{% for payment in payment_breakdown %}'{{ payment.payment_method }}',{% endfor %}],
+            datasets: [{
+                data: [{% for payment in payment_breakdown %}{{ payment.count}},{% endfor %}],
+                backgroundColor: ['#667eea', '#764ba2', '#28a745']
+            }]
+        }
+    });
+</script>
+{% endblock %}
+{% endblock %}

@@ -1,0 +1,99 @@
+{% extends 'backoffice/base.html' %}
+{% block title %}Flight Management - Flight Admin{% endblock %}
+{% block page_title %}Flight Management{% endblock %}
+{% block page_actions %}
+<a href="#" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addFlightModal">
+    <i class="fas fa-plus me-2"></i>Add Flight
+</a>
+{% endblock %}
+{% block content %}
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-6">
+                <input type="text" name="search" class="form-control" placeholder="Search flights..." value="{{ search_query }}">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100">Search</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Flight</th>
+                        <th>Airline</th>
+                        <th>Plane</th>
+                        <th>Origin</th>
+                        <th>Destination</th>
+                        <th>Economy Fare</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for flight in flights %}
+                    <tr>
+                        <td>{{ flight.id }}</td>
+                        <td>{{ flight.airline }}</td>
+                        <td>{{ flight.plane }}</td>
+                        <td>{{ flight.origin }}</td>
+                        <td>{{ flight.destination }}</td>
+                        <td>${{ flight.economy_fare|floatformat:2 }}</td>
+                        <td>
+                            <a href="#" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#editFlightModal{{ flight.id }}">Edit</a>
+                        </td>
+                    </tr>
+                    <!-- Edit Flight Modal -->
+                    <div class="modal fade" id="editFlightModal{{ flight.id }}" tabindex="-1">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Edit Flight #{{ flight.id }}</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <form method="post" action="{% url 'backoffice:flight_management' %}">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="flight_id" value="{{ flight.id }}">
+                                        {{ flight_form.as_p }}
+                                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <tr><td colspan="7">No flights found</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include 'backoffice/pagination.html' %}
+    </div>
+</div>
+
+<!-- Add Flight Modal -->
+<div class="modal fade" id="addFlightModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Flight</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form method="post" action="{% url 'backoffice:flight_management' %}">
+                    {% csrf_token %}
+                    {{ flight_form.as_p }}
+                    <button type="submit" class="btn btn-primary">Add Flight</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

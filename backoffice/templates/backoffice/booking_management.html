@@ -1,0 +1,61 @@
+{% extends 'backoffice/base.html' %}
+{% block title %}Booking Management - Flight Admin{% endblock %}
+{% block page_title %}Booking Management{% endblock %}
+{% block content %}
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-4">
+                <input type="text" name="search" class="form-control" placeholder="Search bookings..." value="{{ search_query }}">
+            </div>
+            <div class="col-md-3">
+                <select name="status" class="form-control">
+                    <option value="">All Statuses</option>
+                    {% for status in status_choices %}
+                    <option value="{{ status.0 }}" {% if status_filter == status.0 %}selected{% endif %}>{{ status.1 }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100">Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Ref No</th>
+                        <th>User</th>
+                        <th>Flight</th>
+                        <th>Fare</th>
+                        <th>Status</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for booking in bookings %}
+                    <tr>
+                        <td>{{ booking.ref_no }}</td>
+                        <td>{{ booking.user.username }}</td>
+                        <td>{{ booking.flight.origin }} to {{ booking.flight.destination }}</td>
+                        <td>${{ booking.total_fare|floatformat:2 }}</td>
+                        <td>
+                            <span class="badge badge-{{ booking.status|lower }}">{{ booking.status }}</span>
+                        </td>
+                        <td>{{ booking.booking_date|date:"d M Y" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6">No bookings found</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include 'backoffice/pagination.html' %}
+    </div>
+</div>
+{% endblock %}

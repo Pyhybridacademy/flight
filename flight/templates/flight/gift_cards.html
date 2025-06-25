@@ -1,0 +1,168 @@
+{% extends 'flight/layout.html' %}
+
+{% load static %}
+{% load flight_extras %}
+
+{% block head %}
+    <title>Gift Cards | Flight</title>
+    <link rel="stylesheet" href="{% static 'css/bookings_style.css' %}">
+    <style>
+        .gift-card-upload {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        .gift-card-item {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            background: #fff;
+        }
+        .status-badge {
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+        .status-pending { background: #fff3cd; color: #856404; }
+        .status-approved { background: #d4edda; color: #155724; }
+        .status-rejected { background: #f8d7da; color: #721c24; }
+        .status-used { background: #e2e3e5; color: #6c757d; }
+        .card-image-preview {
+            max-width: 100px;
+            max-height: 100px;
+            object-fit: cover;
+            border-radius: 4px;
+        }
+    </style>
+{% endblock %}
+
+{% block body %}
+    <section class="section section1">
+        <div class="container">
+            <h3 class="mb-4">My Gift Cards</h3>
+            
+            <!-- Upload New Gift Card -->
+            <div class="gift-card-upload">
+                <h5>Upload New Gift Card</h5>
+                <form id="giftCardForm" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label for="{{form.card_image.id_for_label}}">Gift Card Image:</label>
+                                {{form.card_image}}
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label for="{{form.card_number.id_for_label}}">Card Number (Optional):</label>
+                                {{form.card_number}}
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label for="{{form.amount.id_for_label}}">Amount ($):</label>
+                                {{form.amount}}
+                            </div>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Upload Gift Card</button>
+                </form>
+            </div>
+
+            <!-- Gift Cards List -->
+            <div class="gift-cards-list">
+                {% for card in gift_cards %}
+                    <div class="gift-card-item">
+                        <div class="row align-items-center">
+                            <div class="col-md-2">
+                                {% if card.card_image %}
+                                    <img src="{{card.card_image.url}}" alt="Gift Card" class="card-image-preview">
+                                {% else %}
+                                    <div class="card-image-preview bg-light d-flex align-items-center justify-content-center">
+                                        <span class="text-muted">No Image</span>
+                                    </div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-3">
+                                <strong>Card #{{card.id}}</strong>
+                                {% if card.card_number %}
+                                    <p class="mb-0 text-muted">{{card.card_number}}</p>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-2">
+                                <strong>{{card.amount|currency}}</strong>
+                            </div>
+                            <div class="col-md-2">
+                                <span class="status-badge status-{{card.status|lower}}">
+                                    {{card.get_status_display}}
+                                </span>
+                            </div>
+                            <div class="col-md-2">
+                                <small class="text-muted">
+                                    {{card.uploaded_at|date:"M d, Y"}}
+                                </small>
+                            </div>
+                            <div class="col-md-1">
+                                {% if card.status == 'REJECTED' and card.admin_notes %}
+                                    <button class="btn btn-sm btn-outline-info" data-toggle="tooltip" 
+                                            title="{{card.admin_notes}}">
+                                        <i class="fas fa-info-circle"></i>
+                                    </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        {% if card.admin_notes and card.status == 'REJECTED' %}
+                            <div class="mt-2 p-2 bg-light rounded">
+                                <small><strong>Admin Notes:</strong> {{card.admin_notes}}</small>
+                            </div>
+                        {% endif %}
+                    </div>
+                {% empty %}
+                    <div class="text-center py-5">
+                        <h5>No Gift Cards Yet</h5>
+                        <p class="text-muted">Upload your first gift card to get started!</p>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <script>
+        document.getElementById('giftCardForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            
+            fetch('{% url "upload_gift_card" %}', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Gift card uploaded successfully! Please wait for admin validation.');
+                    location.reload();
+                } else {
+                    alert('Error uploading gift card: ' + JSON.stringify(data.errors || data.message));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred. Please try again.');
+            });
+        });
+
+        // Initialize tooltips
+        $(document).ready(function(){
+            $('[data-toggle="tooltip"]').tooltip();
+        });
+    </script>
+{% endblock %}

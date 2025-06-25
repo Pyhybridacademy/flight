@@ -1,0 +1,106 @@
+{% extends 'backoffice/base.html' %}
+{% block title %}User Management - Flight Admin{% endblock %}
+{% block page_actions %}
+<a href="#" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
+    <i class="fas fa-plus me-2"></i>Add User
+</a>
+{% endblock %}
+{% block content %}
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-6">
+                <input type="text" name="search" class="form-control" placeholder="Search users..." value="{{ search_query }}">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100">Search</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Email</th>
+                        <th>Name</th>
+                        <th>Status</th>
+                        <th>Staff</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td>{{ user.username }}</td>
+                        <td>{{ user.email }}</td>
+                        <td>{{ user.first_name }} {{ user.last_name }}</td>
+                        <td>
+                            <span class="badge badge-{{ user.is_active|yesno:'approved,rejected' }}">
+                                {{ user.is_active|yesno:'Active,Inactive' }}
+                            </span>
+                        </td>
+                        <td>{{ user.is_staff|yesno:'Yes,No' }}</td>
+                        <td>
+                            <button class="btn btn-sm btn-primary toggle-status" 
+                                    data-user-id="{{ user.id }}"
+                                    data-current-status="{{ user.is_active|yesno:'true,false' }}">
+                                Toggle Status
+                            </button>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6">No users found</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include 'backoffice/pagination.html' %}
+    </div>
+</div>
+
+<!-- Add User Modal -->
+<div class="modal fade" id="addUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New User</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addUserForm" method="post" action="{% url 'backoffice:user_management' %}">
+                    {% csrf_token %}
+                    {{ user_form.as_p }}
+                    <button type="submit" class="btn btn-primary">Save User</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+    $('.toggle-status').click(function() {
+        const userId = $(this).data('user-id');
+        const currentStatus = $(this).data('current-status');
+        $.ajax({
+            url: `{% url 'backoffice:toggle_user_status' 0 %}`.replace('0', userId),
+            method: 'POST',
+            headers: {'X-CSRFToken': '{{ csrf_token }}'},
+            success: function(response) {
+                if (response.success) {
+                    location.reload();
+                }
+            },
+            error: function() {
+                alert('Error toggling user status');
+            }
+        });
+    });
+</script>
+{% endblock %}
+{% endblock %}

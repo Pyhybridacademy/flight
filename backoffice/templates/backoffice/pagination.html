@@ -1,0 +1,37 @@
+{% if paginated_object.has_other_pages %}
+    <nav aria-label="Page navigation">
+        <ul class="pagination justify-content-center">
+            {% if paginated_object.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ paginated_object.previous_page_number }}&{{ query_string }}">Previous</a>
+                </li>
+            {% else %}
+                <li class="page-item disabled">
+                    <span class="page-link">Previous</span>
+                </li>
+            {% endif %}
+
+            {% for num in paginated_object.paginator.page_range %}
+                {% if paginated_object.number == num %}
+                    <li class="page-item active">
+                        <span class="page-link">{{ num }}</span>
+                    </li>
+                {% elif num > paginated_object.number|add:-3 and num < paginated_object.number|add:3 %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ num }}&{{ query_string }}">{{ num }}</a>
+                    </li>
+                {% endif %}
+            {% endfor %}
+
+            {% if paginated_object.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ paginated_object.next_page_number }}&{{ query_string }}">Next</a>
+                </li>
+            {% else %}
+                <li class="page-item disabled">
+                    <span class="page-link">Next</span>
+                </li>
+            {% endif %}
+        </ul>
+    </nav>
+{% endif %}

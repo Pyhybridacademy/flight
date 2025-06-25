@@ -1,0 +1,175 @@
+{% extends 'flight/layout.html' %}
+
+{% load static %}
+{% load flight_extras %}
+
+{% block head %}
+    <title>Crypto Payment | Flight</title>
+    <link rel="stylesheet" href="{% static 'css/payment_style.css' %}">
+    <style>
+        .crypto-payment-container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .wallet-info {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .qr-code {
+            max-width: 200px;
+            margin: 20px auto;
+        }
+        .wallet-address {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: monospace;
+            word-break: break-all;
+            margin: 10px 0;
+        }
+        .copy-btn {
+            margin-left: 10px;
+        }
+        .payment-instructions {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .confirmation-form {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+    </style>
+{% endblock %}
+
+{% block body %}
+    <section class="section section1">
+        <div class="container">
+            <div class="crypto-payment-container">
+                <h3 class="text-center mb-4">Complete Your Crypto Payment</h3>
+                
+                <div class="wallet-info">
+                    <h5>{{crypto_wallet.get_crypto_type_display}} Payment</h5>
+                    <p class="text-muted">Amount to pay: <strong>{{amount|currency}}</strong></p>
+                    
+                    {% if crypto_wallet.qr_code %}
+                        <div class="qr-code">
+                            <img src="{{crypto_wallet.qr_code.url}}" alt="QR Code" class="img-fluid">
+                        </div>
+                    {% endif %}
+                    
+                    <div class="wallet-address-section">
+                        <label><strong>Wallet Address:</strong></label>
+                        <div class="d-flex align-items-center">
+                            <div class="wallet-address flex-grow-1" id="walletAddress">
+                                {{crypto_wallet.wallet_address}}
+                            </div>
+                            <button type="button" class="btn btn-outline-secondary copy-btn" onclick="copyAddress()">
+                                Copy
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="payment-instructions">
+                    <h6><strong>Payment Instructions:</strong></h6>
+                    <ol>
+                        <li>Send the exact amount in {{crypto_wallet.get_crypto_type_display}} to the wallet address above</li>
+                        <li>You can scan the QR code or copy the wallet address</li>
+                        <li>After sending the payment, enter the transaction hash below</li>
+                        <li>Wait for admin verification (usually within 24 hours)</li>
+                        <li>Your ticket will be confirmed once payment is verified</li>
+                    </ol>
+                    <div class="alert alert-warning">
+                        <strong>Important:</strong> Make sure to send the payment from your own wallet to ensure verification.
+                    </div>
+                </div>
+
+                <div class="confirmation-form">
+                    <h6>Confirm Your Payment</h6>
+                    <form id="cryptoConfirmForm">
+                        {% csrf_token %}
+                        <input type="hidden" name="payment_id" value="{{payment.id}}">
+                        
+                        <div class="form-group">
+                            <label for="transaction_hash">Transaction Hash:</label>
+                            <input type="text" class="form-control" id="transaction_hash" name="transaction_hash" 
+                                   placeholder="Enter the transaction hash from your wallet" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="crypto_amount">Amount Sent:</label>
+                            <input type="number" class="form-control" id="crypto_amount" name="crypto_amount" 
+                                   step="0.00000001" placeholder="Enter the exact amount you sent" required>
+                        </div>
+                        
+                        <div class="text-center">
+                            <button type="submit" class="btn btn-success">Confirm Payment</button>
+                            <a href="{% url 'bookings' %}" class="btn btn-secondary ml-2">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        function copyAddress() {
+            const addressElement = document.getElementById('walletAddress');
+            const textArea = document.createElement('textarea');
+            textArea.value = addressElement.textContent;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            
+            const copyBtn = document.querySelector('.copy-btn');
+            const originalText = copyBtn.textContent;
+            copyBtn.textContent = 'Copied!';
+            copyBtn.classList.add('btn-success');
+            copyBtn.classList.remove('btn-outline-secondary');
+            
+            setTimeout(() => {
+                copyBtn.textContent = originalText;
+                copyBtn.classList.remove('btn-success');
+                copyBtn.classList.add('btn-outline-secondary');
+            }, 2000);
+        }
+
+        document.getElementById('cryptoConfirmForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            
+            fetch('{% url "confirm_crypto_payment" %}', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Payment confirmation submitted! You will receive an email once verified.');
+                    window.location.href = '{% url "bookings" %}';
+                } else {
+                    alert('Error: ' + (data.error || data.message));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred. Please try again.');
+            });
+        });
+    </script>
+{% endblock %}
