@@ -28,6 +28,7 @@ DEBUG = True
 
 ALLOWED_HOSTS = [
     '127.0.0.1',
+    'flight-eik4.onrender.com'
 ]
 
 
@@ -128,3 +129,5 @@ STATIC_ROOT = os.path.join(BASE_DIR,'staticfiles')
 
 
 AUTH_USER_MODEL = 'flight.User'
+
+CSRF_TRUSTED_ORIGINS = ['https://flight-eik4.onrender.com']
